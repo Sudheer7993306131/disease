@@ -36,6 +36,7 @@ class DiseasePrediction(BaseModel):
     total_disease_symptoms: int
     severity: str  # Mild, Moderate, Severe
     home_remedies: List[str]
+    recommended_specialist: str
 
 class PredictResponse(BaseModel):
     predictions: List[DiseasePrediction]

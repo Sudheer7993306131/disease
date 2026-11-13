@@ -1,6 +1,7 @@
 import os
 import uvicorn
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
 
@@ -24,11 +25,61 @@ app = FastAPI(
 # Enable CORS for React frontend (Vite default port 5173, etc.)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
+
+from pymongo.errors import PyMongoError
+
+@app.exception_handler(PyMongoError)
+async def pymongo_exception_handler(request: Request, exc: PyMongoError):
+    print(f"MongoDB Error: {exc}")
+    origin = request.headers.get("origin", "*")
+    headers = {
+        "Access-Control-Allow-Origin": origin,
+        "Access-Control-Allow-Credentials": "true",
+    }
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Database connection failed! Ensure MongoDB Atlas IP Whitelist is configured."},
+        headers=headers
+    )
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    print(f"Global Exception: {exc}")
+    origin = request.headers.get("origin", "*")
+    headers = {
+        "Access-Control-Allow-Origin": origin,
+        "Access-Control-Allow-Credentials": "true",
+    }
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal Server Error"},
+        headers=headers
+    )
+
+# Initialize Database
+from database import db
+# MongoDB doesn't need create_all, collections are created on demand.
+
+# Include Routers
+from routers import auth_router, doctor_router, consultation_router, chat_router, admin_router, user_router, notification_router, prescription_router
+app.include_router(auth_router.router)
+app.include_router(doctor_router.router)
+app.include_router(consultation_router.router)
+app.include_router(chat_router.router)
+app.include_router(admin_router.router)
+app.include_router(user_router.router)
+app.include_router(notification_router.router)
+app.include_router(prescription_router.router)
+
+
 
 # Dataset directory relative to current file
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))

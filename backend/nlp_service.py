@@ -1,8 +1,7 @@
 import os
 import re
-from typing import List, Set, Dict, Tuple
+from typing import List, Set, Dict, Tuple, Any
 from collections import Counter
-import pandas as pd
 import nltk
 
 # Configure local NLTK data directory located inside the backend workspace
@@ -16,7 +15,7 @@ from nltk.stem import WordNetLemmatizer
 from nltk.tokenize import RegexpTokenizer
 
 class NLPService:
-    def __init__(self, dataset_symptoms: List[str], df_norm: pd.DataFrame):
+    def __init__(self, dataset_symptoms: List[str], df_norm: Any):
         self.dataset_symptoms = dataset_symptoms
         self.df_norm = df_norm
         self.lemmatizer = WordNetLemmatizer()
@@ -31,6 +30,38 @@ class NLPService:
         for sym in self.dataset_symptoms:
             tokens = set(self._clean_and_lemmatize(sym))
             self.symptom_tokens_map[sym] = tokens
+
+        # Precompute normalized co-occurrence lookups (works with DataFrame or list of dicts)
+        self._build_norm_index(df_norm)
+
+    def _build_norm_index(self, df_norm: Any) -> None:
+        self.total_diseases = 0
+        self.symptom_counts: Dict[str, int] = {sym: 0 for sym in self.dataset_symptoms}
+        self.symptom_to_diseases: Dict[str, Set[str]] = {sym: set() for sym in self.dataset_symptoms}
+        self.disease_to_symptoms: Dict[str, List[str]] = {}
+
+        if df_norm is None:
+            return
+
+        if hasattr(df_norm, "iterrows"):
+            rows_iter = (row for _, row in df_norm.iterrows())
+            total = len(df_norm)
+        else:
+            rows_iter = iter(df_norm)
+            total = len(df_norm)
+
+        self.total_diseases = total
+        for row in rows_iter:
+            dis = row["label_dis"]
+            active_syms: List[str] = []
+            for sym in self.dataset_symptoms:
+                val = row.get(sym, 0) if isinstance(row, dict) else (row[sym] if sym in row else 0)
+                if val == 1:
+                    active_syms.append(sym)
+                    self.symptom_counts[sym] += 1
+                    self.symptom_to_diseases[sym].add(dis)
+            if dis not in self.disease_to_symptoms:
+                self.disease_to_symptoms[dis] = active_syms
 
     def _clean_and_lemmatize(self, text: str) -> List[str]:
         text = text.lower().replace('-', ' ').replace("'", "")
@@ -103,48 +134,40 @@ class NLPService:
 
         return sorted(list(matched_symptoms))
 
-    def suggest_co_occurring_symptoms(self, selected_symptoms: List[str], limit: int = 12) -> Tuple[List[Dict[str, any]], int]:
+    def suggest_co_occurring_symptoms(self, selected_symptoms: List[str], limit: int = 12) -> Tuple[List[Dict[str, Any]], int]:
         if not selected_symptoms:
             # Return most common symptoms overall
-            symptom_counts = {}
-            for sym in self.dataset_symptoms:
-                if sym in self.df_norm.columns:
-                    symptom_counts[sym] = int(self.df_norm[sym].sum())
-            sorted_syms = sorted(symptom_counts.items(), key=lambda x: x[1], reverse=True)[:limit]
+            sorted_syms = sorted(self.symptom_counts.items(), key=lambda x: x[1], reverse=True)[:limit]
+            total = self.total_diseases or 1
             suggestions = [
-                {"symptom": s[0], "co_occurrence_count": s[1], "relevance_score": round(s[1] / len(self.df_norm), 3)}
+                {"symptom": s[0], "co_occurrence_count": s[1], "relevance_score": round(s[1] / total, 3)}
                 for s in sorted_syms
             ]
-            return suggestions, len(self.df_norm)
+            return suggestions, self.total_diseases
 
         # Find all diseases that have at least one of the selected symptoms
         selected_set = set(selected_symptoms)
-        dis_list = set()
+        dis_list: Set[str] = set()
         for sym in selected_symptoms:
-            if sym in self.df_norm.columns:
-                diseases_with_sym = self.df_norm[self.df_norm[sym] == 1]['label_dis'].tolist()
-                dis_list.update(diseases_with_sym)
+            if sym in self.symptom_to_diseases:
+                dis_list.update(self.symptom_to_diseases[sym])
 
         counter_list = []
         for dis in dis_list:
-            row = self.df_norm[self.df_norm['label_dis'] == dis]
-            if row.empty:
-                continue
-            row_vals = row.iloc[0]
-            for sym in self.dataset_symptoms:
-                if sym not in selected_set and sym in row_vals and row_vals[sym] == 1:
+            for sym in self.disease_to_symptoms.get(dis, []):
+                if sym not in selected_set:
                     counter_list.append(sym)
 
         counts = Counter(counter_list)
         total_assoc_diseases = len(dis_list) or 1
-        
-        suggestions = []
-        for sym, count in counts.most_common(limit):
-            relevance = round(count / total_assoc_diseases, 3)
-            suggestions.append({
+
+        suggestions = [
+            {
                 "symptom": sym,
                 "co_occurrence_count": count,
-                "relevance_score": relevance
-            })
+                "relevance_score": round(count / total_assoc_diseases, 3)
+            }
+            for sym, count in counts.most_common(limit)
+        ]
 
         return suggestions, len(dis_list)

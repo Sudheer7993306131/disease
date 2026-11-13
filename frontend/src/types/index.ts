@@ -24,6 +24,7 @@ export interface DiseasePrediction {
   total_disease_symptoms: number;
   severity: 'Mild' | 'Moderate' | 'Severe';
   home_remedies: string[];
+  recommended_specialist: string;
 }
 
 export interface PredictResponse {

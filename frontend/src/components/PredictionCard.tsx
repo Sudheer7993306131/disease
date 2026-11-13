@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ShieldAlert, CheckCircle2, HeartPulse, ChevronRight, Stethoscope, AlertTriangle, Info } from 'lucide-react';
 import { DiseasePrediction } from '../types';
 
@@ -13,6 +14,7 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
   rank,
   onOpenRemedies,
 }) => {
+  const navigate = useNavigate();
   const {
     disease,
     probability_percentage,
@@ -20,6 +22,7 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
     unmatched_disease_symptoms,
     total_disease_symptoms,
     severity,
+    recommended_specialist,
   } = prediction;
 
   const getSeverityBadge = () => {
@@ -70,6 +73,10 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
             </div>
             <p className="text-xs text-slate-500 mt-1">
               Matched {matched_symptoms.length} of {total_disease_symptoms} characteristic symptoms
+            </p>
+            <p className="text-xs font-bold text-emerald-700 mt-1 flex items-center gap-1">
+              <Stethoscope className="w-3.5 h-3.5" />
+              Recommended: {recommended_specialist}
             </p>
           </div>
         </div>
@@ -140,20 +147,30 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
       </div>
 
       {/* Action Footer */}
-      <div className="mt-5 pt-3 flex items-center justify-between">
-        <span className="text-xs text-slate-400 flex items-center gap-1">
+      <div className="mt-5 pt-3 flex flex-wrap items-center justify-between gap-2">
+        <span className="text-xs text-slate-400 flex items-center gap-1 w-full sm:w-auto">
           <Stethoscope className="w-3.5 h-3.5" />
           Home care & clinical remedies available
         </span>
 
-        <button
-          type="button"
-          onClick={() => onOpenRemedies(disease)}
-          className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all hover:translate-x-0.5"
-        >
-          <span>View Home Remedies</span>
-          <ChevronRight className="w-3.5 h-3.5" />
-        </button>
+        <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+          <button
+            type="button"
+            onClick={() => navigate(`/doctors?disease=${encodeURIComponent(disease)}`)}
+            className="flex items-center gap-1.5 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all"
+          >
+            <Stethoscope className="w-3.5 h-3.5" />
+            <span>Consult {recommended_specialist}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => onOpenRemedies(disease)}
+            className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all hover:translate-x-0.5"
+          >
+            <span>View Home Remedies</span>
+            <ChevronRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
     </div>
   );
